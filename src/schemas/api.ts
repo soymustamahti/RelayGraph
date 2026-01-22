@@ -15,7 +15,14 @@ export const IngestRequestSchema = z.object({
 
 export const IngestResponseSchema = z.object({
   success: z.literal(true),
-  chunkId: z.string().uuid(),
+  chunkId: z.object({
+    documentId: z.string(),
+    isNewDocument: z.boolean(),
+    chunkCount: z.number(),
+    entityCount: z.number(),
+    relationCount: z.number(),
+    processingTimeMs: z.number(),
+  }),
   message: z.string(),
 });
 
@@ -25,7 +32,32 @@ export const AskRequestSchema = z.object({
 
 export const AskResponseSchema = z.object({
   success: z.literal(true),
-  answer: z.string(),
+  answer: z.object({
+    answer: z.string(),
+    context: z.object({
+      chunks: z.array(
+        z.object({
+          id: z.string(),
+          content: z.string(),
+          similarity: z.number(),
+        }),
+      ),
+      entities: z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          type: z.string().optional(),
+        }),
+      ),
+      graph: z.array(
+        z.object({
+          source: z.object({ name: z.string() }),
+          relationship: z.string(),
+          target: z.object({ name: z.string() }),
+        }),
+      ),
+    }),
+  }),
 });
 
 export const HealthResponseSchema = z.object({

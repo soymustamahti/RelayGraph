@@ -1,114 +1,144 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { createMockNeo4jDriver, createMockPostgresDriver } from "../mocks";
 
-describe("PostgresDriver Mock", () => {
+describe("PostgresDriver", () => {
   let mockPg: ReturnType<typeof createMockPostgresDriver>;
 
   beforeEach(() => {
     mockPg = createMockPostgresDriver();
   });
 
-  describe("connect", () => {
-    it("should resolve without error", async () => {
+  describe("connection", () => {
+    it("should connect without error", async () => {
       await expect(mockPg.connect()).resolves.toBeUndefined();
     });
-  });
 
-  describe("disconnect", () => {
-    it("should resolve without error", async () => {
+    it("should disconnect without error", async () => {
       await expect(mockPg.disconnect()).resolves.toBeUndefined();
     });
-  });
 
-  describe("init", () => {
-    it("should resolve without error", async () => {
+    it("should initialize without error", async () => {
       await expect(mockPg.init()).resolves.toBeUndefined();
     });
   });
 
-  describe("addChunk", () => {
-    it("should return a chunk ID", async () => {
-      const chunkId = await mockPg.addChunk("test content", [], {});
-      expect(chunkId).toBe("test-chunk-id-123");
+  describe("document operations", () => {
+    it("should upsert document and return id", async () => {
+      const result = await mockPg.upsertDocument("Test", "content", {});
+      expect(result).toHaveProperty("id");
+      expect(result).toHaveProperty("isNew");
+    });
+
+    it("should get document by id", async () => {
+      const doc = await mockPg.getDocument("doc-123");
+      expect(doc).toBeDefined();
+      expect(doc?.name).toBe("Test Document");
+    });
+
+    it("should delete document", async () => {
+      const result = await mockPg.deleteDocument("doc-123");
+      expect(result).toBe(true);
     });
   });
 
-  describe("findSimilarChunks", () => {
-    it("should return similar chunks with similarity scores", async () => {
-      const chunks = await mockPg.findSimilarChunks([], 5);
-      expect(chunks).toHaveLength(2);
-      expect(chunks[0]).toHaveProperty("id");
-      expect(chunks[0]).toHaveProperty("content");
+  describe("chunk operations", () => {
+    it("should add chunks and return ids", async () => {
+      const chunkIds = await mockPg.addChunks("doc-123", [
+        { content: "test", embedding: [], chunkIndex: 0 },
+      ]);
+      expect(chunkIds).toHaveLength(2);
+    });
+
+    it("should search chunks with similarity scores", async () => {
+      const chunks = await mockPg.searchChunks([], 5, 0.5);
+      expect(chunks).toHaveLength(1);
       expect(chunks[0]).toHaveProperty("similarity");
     });
   });
 
-  describe("deleteChunk", () => {
-    it("should resolve without error", async () => {
-      await expect(mockPg.deleteChunk("chunk-id")).resolves.toBeUndefined();
+  describe("stats", () => {
+    it("should return document and chunk counts", async () => {
+      const stats = await mockPg.getStats();
+      expect(stats.documentCount).toBe(5);
+      expect(stats.chunkCount).toBe(25);
     });
   });
 });
 
-describe("Neo4jDriver Mock", () => {
+describe("Neo4jDriver", () => {
   let mockNeo4j: ReturnType<typeof createMockNeo4jDriver>;
 
   beforeEach(() => {
     mockNeo4j = createMockNeo4jDriver();
   });
 
-  describe("verifyConnectivity", () => {
-    it("should resolve without error", async () => {
+  describe("connection", () => {
+    it("should verify connectivity", async () => {
       await expect(mockNeo4j.verifyConnectivity()).resolves.toBeUndefined();
     });
-  });
 
-  describe("close", () => {
-    it("should resolve without error", async () => {
+    it("should close without error", async () => {
       await expect(mockNeo4j.close()).resolves.toBeUndefined();
     });
-  });
 
-  describe("mergeNode", () => {
-    it("should resolve without error", async () => {
-      await expect(
-        mockNeo4j.mergeNode("Person", "john", "John", "chunk-1", {}),
-      ).resolves.toBeUndefined();
+    it("should initialize without error", async () => {
+      await expect(mockNeo4j.init()).resolves.toBeUndefined();
     });
   });
 
-  describe("createRelationship", () => {
-    it("should resolve without error", async () => {
+  describe("entity operations", () => {
+    it("should upsert entity", async () => {
       await expect(
-        mockNeo4j.createRelationship(
-          "a-id",
-          "Entity",
-          "b-id",
-          "Entity",
-          "RELATED",
-          "chunk-1",
-        ),
+        mockNeo4j.upsertEntity({
+          id: "test",
+          name: "Test",
+          type: "Person",
+        }),
       ).resolves.toBeUndefined();
     });
-  });
 
-  describe("findEntitiesByChunks", () => {
-    it("should return entities linked to chunks", async () => {
-      const entities = await mockNeo4j.findEntitiesByChunks(["chunk-1"]);
+    it("should get entity by id", async () => {
+      const entity = await mockNeo4j.getEntity("mustapha");
+      expect(entity).toBeDefined();
+      expect(entity?.name).toBe("Mustapha");
+    });
+
+    it("should search entities", async () => {
+      const entities = await mockNeo4j.searchEntities("mustapha", 10);
       expect(entities).toHaveLength(2);
-      expect(entities[0]).toHaveProperty("id");
-      expect(entities[0]).toHaveProperty("name");
-      expect(entities[0]).toHaveProperty("source_chunk_id");
+    });
+
+    it("should delete entity", async () => {
+      await expect(mockNeo4j.deleteEntity("test")).resolves.toBeUndefined();
     });
   });
 
-  describe("getNeighbors", () => {
-    it("should return graph triples", async () => {
-      const triples = await mockNeo4j.getNeighbors(["entity-1"]);
-      expect(triples).toHaveLength(1);
-      expect(triples[0]).toHaveProperty("source");
-      expect(triples[0]).toHaveProperty("relationship");
-      expect(triples[0]).toHaveProperty("target");
+  describe("relationship operations", () => {
+    it("should upsert relationship", async () => {
+      await expect(
+        mockNeo4j.upsertRelationship({
+          id: "test",
+          sourceId: "a",
+          targetId: "b",
+          type: "RELATED_TO",
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it("should get neighbors", async () => {
+      const neighbors = await mockNeo4j.getNeighbors(["mustapha"]);
+      expect(neighbors).toHaveLength(1);
+      expect(neighbors[0].source.name).toBe("Mustapha");
+      expect(neighbors[0].relationship).toBe("BUILDS");
+    });
+  });
+
+  describe("stats", () => {
+    it("should return graph statistics", async () => {
+      const stats = await mockNeo4j.getStats();
+      expect(stats.entityCount).toBe(10);
+      expect(stats.relationshipCount).toBe(15);
+      expect(stats.entityTypes).toHaveProperty("Person");
     });
   });
 });

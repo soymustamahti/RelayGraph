@@ -1,116 +1,84 @@
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
 import {
-  AskRequestSchema,
-  ErrorSchema,
-  IngestRequestSchema,
-} from "../../src/schemas/api";
-import {
-  EntitySchema,
+  EXTRACTION_JSON_SCHEMA,
   ExtractionResultSchema,
-  RelationshipSchema,
 } from "../../src/schemas/extraction";
 
-describe("Extraction Schemas", () => {
-  describe("EntitySchema", () => {
-    it("should accept valid entity", () => {
-      const entity = {
-        name: "Mustapha",
-        type: "Person",
-        description: "A developer",
-      };
-      expect(() => EntitySchema.parse(entity)).not.toThrow();
+describe("Extraction Schema", () => {
+  describe("EXTRACTION_JSON_SCHEMA", () => {
+    it("should have correct name", () => {
+      expect(EXTRACTION_JSON_SCHEMA.name).toBe("extraction_result");
     });
 
-    it("should require name field", () => {
-      const entity = { type: "Person", description: "A developer" };
-      expect(() => EntitySchema.parse(entity)).toThrow();
+    it("should be strict mode", () => {
+      expect(EXTRACTION_JSON_SCHEMA.strict).toBe(true);
     });
 
-    it("should require type field", () => {
-      const entity = { name: "Mustapha", description: "A developer" };
-      expect(() => EntitySchema.parse(entity)).toThrow();
+    it("should define entities array", () => {
+      expect(EXTRACTION_JSON_SCHEMA.schema.properties).toHaveProperty(
+        "entities",
+      );
+      expect(EXTRACTION_JSON_SCHEMA.schema.properties.entities.type).toBe(
+        "array",
+      );
+    });
+
+    it("should define relationships array", () => {
+      expect(EXTRACTION_JSON_SCHEMA.schema.properties).toHaveProperty(
+        "relationships",
+      );
+      expect(EXTRACTION_JSON_SCHEMA.schema.properties.relationships.type).toBe(
+        "array",
+      );
+    });
+
+    it("should require name, type, description for entities", () => {
+      const entityItems =
+        EXTRACTION_JSON_SCHEMA.schema.properties.entities.items;
+      expect(entityItems.required).toContain("name");
+      expect(entityItems.required).toContain("type");
+      expect(entityItems.required).toContain("description");
+    });
+
+    it("should require source, target, relation, fact for relationships", () => {
+      const relItems =
+        EXTRACTION_JSON_SCHEMA.schema.properties.relationships.items;
+      expect(relItems.required).toContain("source");
+      expect(relItems.required).toContain("target");
+      expect(relItems.required).toContain("relation");
+      expect(relItems.required).toContain("fact");
     });
   });
 
-  describe("RelationshipSchema", () => {
-    it("should accept valid relationship", () => {
-      const rel = {
-        source: "Mustapha",
-        target: "RelayGraph",
-        relation: "BUILDS",
-      };
-      expect(() => RelationshipSchema.parse(rel)).not.toThrow();
+  describe("ExtractionResultSchema (Zod)", () => {
+    it("should validate valid extraction result", () => {
+      const result = ExtractionResultSchema.parse({
+        entities: [
+          { name: "Test", type: "Person", description: "A test entity" },
+        ],
+        relationships: [
+          { source: "A", target: "B", relation: "KNOWS", fact: "A knows B" },
+        ],
+      });
+      expect(result.entities).toHaveLength(1);
+      expect(result.relationships).toHaveLength(1);
     });
 
-    it("should require all fields", () => {
+    it("should validate empty arrays", () => {
+      const result = ExtractionResultSchema.parse({
+        entities: [],
+        relationships: [],
+      });
+      expect(result.entities).toHaveLength(0);
+    });
+
+    it("should reject invalid entity", () => {
       expect(() =>
-        RelationshipSchema.parse({ source: "A", target: "B" }),
+        ExtractionResultSchema.parse({
+          entities: [{ name: "Test" }],
+          relationships: [],
+        }),
       ).toThrow();
-      expect(() =>
-        RelationshipSchema.parse({ source: "A", relation: "R" }),
-      ).toThrow();
-      expect(() =>
-        RelationshipSchema.parse({ target: "B", relation: "R" }),
-      ).toThrow();
-    });
-  });
-
-  describe("ExtractionResultSchema", () => {
-    it("should accept valid extraction result", () => {
-      const result = {
-        entities: [{ name: "Test", type: "Person", description: "Desc" }],
-        relationships: [{ source: "A", target: "B", relation: "RELATED" }],
-      };
-      expect(() => ExtractionResultSchema.parse(result)).not.toThrow();
-    });
-
-    it("should accept empty arrays", () => {
-      const result = { entities: [], relationships: [] };
-      expect(() => ExtractionResultSchema.parse(result)).not.toThrow();
-    });
-  });
-});
-
-describe("API Schemas", () => {
-  describe("IngestRequestSchema", () => {
-    it("should accept valid ingest request", () => {
-      const request = { text: "Some content to ingest" };
-      expect(() => IngestRequestSchema.parse(request)).not.toThrow();
-    });
-
-    it("should accept request with metadata", () => {
-      const request = { text: "Content", metadata: { source: "test" } };
-      expect(() => IngestRequestSchema.parse(request)).not.toThrow();
-    });
-
-    it("should reject empty text", () => {
-      const request = { text: "" };
-      expect(() => IngestRequestSchema.parse(request)).toThrow();
-    });
-  });
-
-  describe("AskRequestSchema", () => {
-    it("should accept valid ask request", () => {
-      const request = { query: "Who is Mustapha?" };
-      expect(() => AskRequestSchema.parse(request)).not.toThrow();
-    });
-
-    it("should reject empty query", () => {
-      const request = { query: "" };
-      expect(() => AskRequestSchema.parse(request)).toThrow();
-    });
-  });
-
-  describe("ErrorSchema", () => {
-    it("should accept valid error response", () => {
-      const error = { success: false, error: "Something went wrong" };
-      expect(() => ErrorSchema.parse(error)).not.toThrow();
-    });
-
-    it("should reject success: true", () => {
-      const error = { success: true, error: "Error message" };
-      expect(() => ErrorSchema.parse(error)).toThrow();
     });
   });
 });

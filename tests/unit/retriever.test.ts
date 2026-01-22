@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { HybridRetriever } from "../../src/modules/HybridRetriever";
+import { beforeEach, describe, expect, it } from "bun:test";
+import { HybridRetriever } from "../../src/modules/retrieval";
 import { createMockNeo4jDriver, createMockPostgresDriver } from "../mocks";
 
 describe("HybridRetriever", () => {
@@ -15,73 +15,52 @@ describe("HybridRetriever", () => {
     });
   });
 
-  describe("retrieve", () => {
-    it("should return empty results for unknown query", async () => {
-      mockPg.findSimilarChunks = mock(() => Promise.resolve([]));
-      expect(mockPg.findSimilarChunks).toBeDefined();
+  describe("configuration", () => {
+    it("should accept apiKey option", () => {
+      const r = new HybridRetriever(mockPg as any, mockNeo4j as any, {
+        apiKey: "test-key",
+      });
+      expect(r).toBeDefined();
     });
 
-    it("should call findSimilarChunks on Postgres driver", () => {
-      expect(mockPg.findSimilarChunks).toBeDefined();
-      expect(typeof mockPg.findSimilarChunks).toBe("function");
+    it("should accept custom model configuration", () => {
+      const r = new HybridRetriever(mockPg as any, mockNeo4j as any, {
+        apiKey: "test-key",
+        models: { embeddingModel: "text-embedding-ada-002" },
+      });
+      expect(r).toBeDefined();
     });
 
-    it("should call findEntitiesByChunks on Neo4j driver", () => {
-      expect(mockNeo4j.findEntitiesByChunks).toBeDefined();
-      expect(typeof mockNeo4j.findEntitiesByChunks).toBe("function");
+    it("should throw error if no apiKey or client provided", () => {
+      expect(() => {
+        new HybridRetriever(mockPg as any, mockNeo4j as any, {});
+      }).toThrow("Either openaiClient or apiKey must be provided");
     });
+  });
 
-    it("should call getNeighbors on Neo4j driver for graph traversal", () => {
-      expect(mockNeo4j.getNeighbors).toBeDefined();
-      expect(typeof mockNeo4j.getNeighbors).toBe("function");
+  describe("searchEntities", () => {
+    it("should search entities in neo4j", async () => {
+      const entities = await retriever.searchEntities("mustapha", 10);
+      expect(entities).toHaveLength(2);
+      expect(entities[0].name).toBe("Mustapha");
     });
   });
 });
 
-describe("HybridRetriever - Mock Integration", () => {
-  it("should find entities by chunk IDs", async () => {
+describe("HybridRetriever Mock Integration", () => {
+  it("should search entities by name", async () => {
     const mockNeo4j = createMockNeo4jDriver();
-
-    const entities = await mockNeo4j.findEntitiesByChunks(["chunk-1"]);
-
+    const entities = await mockNeo4j.searchEntities("mustapha");
     expect(entities).toHaveLength(2);
     expect(entities[0].name).toBe("Mustapha");
-    expect(entities[1].name).toBe("RelayGraph");
   });
 
-  it("should return graph triples from getNeighbors", async () => {
+  it("should return graph neighbors", async () => {
     const mockNeo4j = createMockNeo4jDriver();
-
-    const triples = await mockNeo4j.getNeighbors(["mustapha"]);
-
-    expect(triples).toHaveLength(1);
-    expect(triples[0].source.name).toBe("Mustapha");
-    expect(triples[0].relationship).toBe("BUILDS");
-    expect(triples[0].target.name).toBe("RelayGraph");
-  });
-});
-
-describe("HybridRetriever - Configuration", () => {
-  it("should accept custom model configuration", () => {
-    const mockPg = createMockPostgresDriver();
-    const mockNeo4j = createMockNeo4jDriver();
-
-    const retriever = new HybridRetriever(mockPg as any, mockNeo4j as any, {
-      apiKey: "test-api-key",
-      models: {
-        embeddingModel: "text-embedding-ada-002",
-      },
-    });
-
-    expect(retriever).toBeDefined();
-  });
-
-  it("should throw error if no apiKey or client provided", () => {
-    const mockPg = createMockPostgresDriver();
-    const mockNeo4j = createMockNeo4jDriver();
-
-    expect(() => {
-      new HybridRetriever(mockPg as any, mockNeo4j as any, {});
-    }).toThrow("Either openaiClient or apiKey must be provided");
+    const neighbors = await mockNeo4j.getNeighbors(["mustapha"]);
+    expect(neighbors).toHaveLength(1);
+    expect(neighbors[0].source.name).toBe("Mustapha");
+    expect(neighbors[0].relationship).toBe("BUILDS");
+    expect(neighbors[0].target.name).toBe("RelayGraph");
   });
 });

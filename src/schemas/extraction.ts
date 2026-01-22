@@ -4,12 +4,17 @@ export const EntitySchema = z.object({
   name: z.string(),
   type: z.string(),
   description: z.string(),
+  attributes: z.record(z.string(), z.any()).optional(),
 });
 
 export const RelationshipSchema = z.object({
   source: z.string(),
   target: z.string(),
   relation: z.string(),
+  fact: z
+    .string()
+    .describe("Natural language statement describing this relationship"),
+  attributes: z.record(z.string(), z.any()).optional(),
 });
 
 export const ExtractionResultSchema = z.object({
@@ -37,7 +42,10 @@ export const EXTRACTION_JSON_SCHEMA = {
               type: "string",
               description: "Entity type: Person, Organization, Project, etc.",
             },
-            description: { type: "string", description: "Brief description" },
+            description: {
+              type: "string",
+              description: "Brief description of the entity",
+            },
           },
           required: ["name", "type", "description"],
           additionalProperties: false,
@@ -60,8 +68,13 @@ export const EXTRACTION_JSON_SCHEMA = {
               type: "string",
               description: "Relationship type: WORKS_FOR, BUILDS, etc.",
             },
+            fact: {
+              type: "string",
+              description:
+                "Natural language statement describing this relationship",
+            },
           },
-          required: ["source", "target", "relation"],
+          required: ["source", "target", "relation", "fact"],
           additionalProperties: false,
         },
       },

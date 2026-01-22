@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 export type EntityConfig = {
   label: string;
   description: string;
@@ -16,80 +14,60 @@ export class SchemaManager {
 
   constructor() {
     this.entities = [
-      { label: "Person", description: "Available for individuals." },
+      { label: "Person", description: "Individuals, people, humans." },
       {
         label: "Organization",
         description: "Companies, agencies, institutions.",
       },
       { label: "Location", description: "Physical places, cities, countries." },
+      {
+        label: "Technology",
+        description: "Software, hardware, tools, frameworks.",
+      },
+      { label: "Project", description: "Projects, initiatives, products." },
+      {
+        label: "Concept",
+        description: "Abstract ideas, theories, methodologies.",
+      },
+      { label: "Event", description: "Occurrences, meetings, conferences." },
     ];
 
     this.relations = [
       { type: "WORKS_FOR", description: "Person works for Organization." },
+      { type: "WORKS_WITH", description: "Person works with another Person." },
       { type: "LOCATED_IN", description: "Entity is located in Location." },
+      { type: "CREATED", description: "Something was created by someone." },
+      { type: "USES", description: "Entity uses another entity." },
+      { type: "PART_OF", description: "Entity is part of another entity." },
       { type: "RELATED_TO", description: "Generic relationship." },
     ];
   }
 
-  extend(
-    customEntities: EntityConfig[],
-    customRelations: RelationConfig[],
-  ): void {
-    this.entities.push(...customEntities);
-    this.relations.push(...customRelations);
+  getEntityTypes(): EntityConfig[] {
+    return [...this.entities];
   }
 
-  getZodSchema() {
-    return z.object({
-      nodes: z.array(
-        z.object({
-          name: z.string(),
-          label: z.enum([
-            this.entities[0].label,
-            ...this.entities.slice(1).map((e) => e.label),
-          ]),
-          description: z.string().optional(),
-        }),
-      ),
-      edges: z.array(
-        z.object({
-          source: z
-            .string()
-            .describe("Name of the source node (must exist in nodes list)"),
-          target: z
-            .string()
-            .describe("Name of the target node (must exist in nodes list)"),
-          relation: z.enum([
-            this.relations[0].type,
-            ...this.relations.slice(1).map((r) => r.type),
-          ]),
-          description: z.string().optional(),
-        }),
-      ),
-    });
+  getRelationTypes(): RelationConfig[] {
+    return [...this.relations];
   }
 
-  getSystemPrompt(): string {
-    const entityList = this.entities
-      .map((e) => `- ${e.label}: ${e.description}`)
-      .join("\n");
-    const relationList = this.relations
-      .map((r) => `- ${r.type}: ${r.description}`)
-      .join("\n");
+  addEntityType(label: string, description: string): void {
+    if (!this.entities.find((e) => e.label === label)) {
+      this.entities.push({ label, description });
+    }
+  }
 
-    return `
-You are a top-tier Knowledge Graph Extractor.
-Target Ontology:
-Entities:
-${entityList}
+  addRelationType(type: string, description: string): void {
+    if (!this.relations.find((r) => r.type === type)) {
+      this.relations.push({ type, description });
+    }
+  }
 
-Relationships:
-${relationList}
+  getEntityTypesPrompt(): string {
+    return this.entities.map((e) => `${e.label}: ${e.description}`).join("\n");
+  }
 
-Rules:
-1. Identify entities and relationships from the text.
-2. Use ONLY the provided labels and relationship types.
-3. Return JSON satisfying the schema.
-    `.trim();
+  getRelationTypesPrompt(): string {
+    return this.relations.map((r) => `${r.type}: ${r.description}`).join("\n");
   }
 }

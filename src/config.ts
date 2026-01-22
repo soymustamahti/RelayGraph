@@ -3,12 +3,37 @@ import { z } from "zod";
 
 export const PostgresConfigSchema = z.object({
   connectionString: z.string(),
+  embeddingDimensions: z.number().optional(),
 });
 
 export const Neo4jConfigSchema = z.object({
   uri: z.string(),
   user: z.string(),
   password: z.string(),
+});
+
+export const ChunkingStrategySchema = z.enum([
+  "fixed",
+  "token",
+  "sentence",
+  "paragraph",
+  "recursive",
+  "semantic",
+]);
+
+export const ChunkerConfigSchema = z.object({
+  strategy: ChunkingStrategySchema.optional(),
+  chunkSize: z.number().min(100).max(10000).optional(),
+  chunkOverlap: z.number().min(0).optional(),
+  separators: z.array(z.string()).optional(),
+  minChunkSize: z.number().min(0).optional(),
+  trimWhitespace: z.boolean().optional(),
+});
+
+export const IngestionConfigSchema = z.object({
+  chunker: ChunkerConfigSchema.optional(),
+  embeddingBatchSize: z.number().min(1).max(100).optional(),
+  maxChunkChars: z.number().min(1000).max(50000).optional(),
 });
 
 export const ModelConfigSchema = z.object({
@@ -24,10 +49,13 @@ export const RelayConfigSchema = z.object({
   neo4j: Neo4jConfigSchema,
   openaiApiKey: z.string().optional(),
   models: ModelConfigSchema.optional(),
+  ingestion: IngestionConfigSchema.optional(),
 });
 
 export type PostgresConfig = z.infer<typeof PostgresConfigSchema>;
 export type Neo4jConfig = z.infer<typeof Neo4jConfigSchema>;
+export type ChunkerConfigInput = z.infer<typeof ChunkerConfigSchema>;
+export type IngestionConfigInput = z.infer<typeof IngestionConfigSchema>;
 export type ModelConfigInput = z.infer<typeof ModelConfigSchema>;
 export type RelayConfig = z.infer<typeof RelayConfigSchema>;
 
@@ -44,11 +72,11 @@ export interface ResolvedModelConfig {
 }
 
 export const DEFAULT_MODEL_CONFIG: ResolvedModelConfig = {
-  chatModel: "gpt-4o",
+  chatModel: "gpt-4o-mini",
   embeddingModel: "text-embedding-3-small",
   embeddingDimensions: 1536,
   temperature: 0,
-  maxRetries: 3,
+  maxRetries: 2,
 };
 
 export function resolveModelConfig(
