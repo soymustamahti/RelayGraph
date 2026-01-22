@@ -4,12 +4,28 @@
     "enabled": true
   },
   "files": {
-    "ignore": ["dist", "node_modules", "package-lock.json", "yarn.lock"]
+    "ignore": [
+      "dist",
+      "node_modules",
+      "package-lock.json",
+      "yarn.lock",
+      "ignore",
+      "scripts"
+    ]
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "noForEach": "off"
+      }
     }
   },
   "formatter": {
