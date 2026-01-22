@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: "*.{ts,tsx,js,jsx,json}"
+      run: yarn lint
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: yarn typecheck

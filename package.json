@@ -1,0 +1,40 @@
+{
+  "name": "relay-graph",
+  "version": "0.0.1",
+  "description": "A TypeScript library built with Bun",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "bun test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "prepare": "lefthook install",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.5.3",
+    "@changesets/cli": "^2.27.1",
+    "@types/bun": "latest",
+    "lefthook": "^1.6.1",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3"
+  }
+}
