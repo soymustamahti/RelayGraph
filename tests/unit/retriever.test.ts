@@ -10,19 +10,14 @@ describe("HybridRetriever", () => {
   beforeEach(() => {
     mockPg = createMockPostgresDriver();
     mockNeo4j = createMockNeo4jDriver();
-    retriever = new HybridRetriever(
-      "test-api-key",
-      mockPg as any,
-      mockNeo4j as any,
-    );
+    retriever = new HybridRetriever(mockPg as any, mockNeo4j as any, {
+      apiKey: "test-api-key",
+    });
   });
 
   describe("retrieve", () => {
     it("should return empty results for unknown query", async () => {
       mockPg.findSimilarChunks = mock(() => Promise.resolve([]));
-
-      // Mock OpenAI calls would be needed here
-      // For now, we test the expected behavior
       expect(mockPg.findSimilarChunks).toBeDefined();
     });
 
@@ -63,5 +58,30 @@ describe("HybridRetriever - Mock Integration", () => {
     expect(triples[0].source.name).toBe("Mustapha");
     expect(triples[0].relationship).toBe("BUILDS");
     expect(triples[0].target.name).toBe("RelayGraph");
+  });
+});
+
+describe("HybridRetriever - Configuration", () => {
+  it("should accept custom model configuration", () => {
+    const mockPg = createMockPostgresDriver();
+    const mockNeo4j = createMockNeo4jDriver();
+
+    const retriever = new HybridRetriever(mockPg as any, mockNeo4j as any, {
+      apiKey: "test-api-key",
+      models: {
+        embeddingModel: "text-embedding-ada-002",
+      },
+    });
+
+    expect(retriever).toBeDefined();
+  });
+
+  it("should throw error if no apiKey or client provided", () => {
+    const mockPg = createMockPostgresDriver();
+    const mockNeo4j = createMockNeo4jDriver();
+
+    expect(() => {
+      new HybridRetriever(mockPg as any, mockNeo4j as any, {});
+    }).toThrow("Either openaiClient or apiKey must be provided");
   });
 });

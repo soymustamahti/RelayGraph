@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Extractor } from "../../src/modules/Extractor";
 import { createMockNeo4jDriver, createMockPostgresDriver } from "../mocks";
 
@@ -10,14 +10,15 @@ describe("Extractor", () => {
   beforeEach(() => {
     mockPg = createMockPostgresDriver();
     mockNeo4j = createMockNeo4jDriver();
-    extractor = new Extractor("test-api-key", mockPg as any, mockNeo4j as any);
+    extractor = new Extractor(mockPg as any, mockNeo4j as any, {
+      apiKey: "test-api-key",
+    });
   });
 
   describe("process", () => {
     it("should generate embedding and save chunk to Postgres", async () => {
       const text = "Test document content";
 
-      // Mock OpenAI calls
       const originalFetch = globalThis.fetch;
       globalThis.fetch = mock(() =>
         Promise.resolve({
@@ -30,7 +31,6 @@ describe("Extractor", () => {
       );
 
       try {
-        // This will fail because we can't mock OpenAI properly, but we can test the flow
         await expect(extractor.process(text)).rejects.toThrow();
       } finally {
         globalThis.fetch = originalFetch;
@@ -39,8 +39,6 @@ describe("Extractor", () => {
 
     it("should rollback chunk on extraction failure", async () => {
       mockPg.addChunk = mock(() => Promise.resolve("test-chunk-id"));
-
-      // Verify that deleteChunk would be called on failure
       expect(mockPg.deleteChunk).not.toHaveBeenCalled();
     });
   });
@@ -48,7 +46,6 @@ describe("Extractor", () => {
 
 describe("Extractor - Schema Validation", () => {
   it("should have valid extraction JSON schema structure", async () => {
-    // Import the schema
     const { EXTRACTION_JSON_SCHEMA } = await import(
       "../../src/schemas/extraction"
     );
@@ -82,5 +79,32 @@ describe("Extractor - Schema Validation", () => {
     expect(relItems.required).toContain("source");
     expect(relItems.required).toContain("target");
     expect(relItems.required).toContain("relation");
+  });
+});
+
+describe("Extractor - Configuration", () => {
+  it("should accept custom model configuration", () => {
+    const mockPg = createMockPostgresDriver();
+    const mockNeo4j = createMockNeo4jDriver();
+
+    const extractor = new Extractor(mockPg as any, mockNeo4j as any, {
+      apiKey: "test-api-key",
+      models: {
+        chatModel: "gpt-3.5-turbo",
+        embeddingModel: "text-embedding-ada-002",
+        temperature: 0.5,
+      },
+    });
+
+    expect(extractor).toBeDefined();
+  });
+
+  it("should throw error if no apiKey or client provided", () => {
+    const mockPg = createMockPostgresDriver();
+    const mockNeo4j = createMockNeo4jDriver();
+
+    expect(() => {
+      new Extractor(mockPg as any, mockNeo4j as any, {});
+    }).toThrow("Either openaiClient or apiKey must be provided");
   });
 });

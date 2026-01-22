@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import type { ModelConfigInput, ResolvedModelConfig } from "../config";
+import { DEFAULT_MODEL_CONFIG } from "../config";
 import type { Neo4jDriver } from "../db/neo4j";
 import type { PostgresDriver } from "../db/postgres";
 import {
@@ -8,20 +10,39 @@ import {
 } from "../schemas/extraction";
 import { slugify } from "../utils/text";
 
+export interface ExtractorOptions {
+  openaiClient?: OpenAI;
+  apiKey?: string;
+  models?: Partial<ModelConfigInput>;
+}
+
 export class Extractor {
   private openai: OpenAI;
   private pg: PostgresDriver;
   private neo4j: Neo4jDriver;
+  private config: ResolvedModelConfig;
 
-  constructor(apiKey: string, pg: PostgresDriver, neo4j: Neo4jDriver) {
-    this.openai = new OpenAI({ apiKey });
+  constructor(
+    pg: PostgresDriver,
+    neo4j: Neo4jDriver,
+    options: ExtractorOptions,
+  ) {
+    if (options.openaiClient) {
+      this.openai = options.openaiClient;
+    } else if (options.apiKey) {
+      this.openai = new OpenAI({ apiKey: options.apiKey });
+    } else {
+      throw new Error("Either openaiClient or apiKey must be provided");
+    }
+
     this.pg = pg;
     this.neo4j = neo4j;
+    this.config = { ...DEFAULT_MODEL_CONFIG, ...options.models };
   }
 
   async process(text: string): Promise<string> {
     const embeddingResponse = await this.openai.embeddings.create({
-      model: "text-embedding-3-small",
+      model: this.config.embeddingModel,
       input: text,
       encoding_format: "float",
     });
@@ -42,11 +63,12 @@ export class Extractor {
     }
   }
 
-  private async extract(text: string, retries = 3): Promise<ExtractionResult> {
-    for (let attempt = 1; attempt <= retries; attempt++) {
+  private async extract(text: string): Promise<ExtractionResult> {
+    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
         const completion = await this.openai.chat.completions.create({
-          model: "gpt-4o",
+          model: this.config.chatModel,
+          temperature: this.config.temperature,
           messages: [
             {
               role: "system",
@@ -70,7 +92,7 @@ export class Extractor {
         const parsed = JSON.parse(rawJson);
         return ExtractionResultSchema.parse(parsed);
       } catch (error) {
-        if (attempt === retries) throw error;
+        if (attempt === this.config.maxRetries) throw error;
         console.warn(`Extraction attempt ${attempt} failed, retrying...`);
       }
     }

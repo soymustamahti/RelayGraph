@@ -1,5 +1,11 @@
 import OpenAI from "openai";
-import { type RelayConfig, RelayConfigSchema } from "./config";
+import {
+  DEFAULT_MODEL_CONFIG,
+  type RelayConfig,
+  RelayConfigSchema,
+  type RelayConfigWithClient,
+  type ResolvedModelConfig,
+} from "./config";
 import { Neo4jDriver } from "./db/neo4j";
 import { PostgresDriver } from "./db/postgres";
 import { Extractor } from "./modules/Extractor";
@@ -10,18 +16,35 @@ export class RelayGraph {
   private neo4j: Neo4jDriver;
   private extractor: Extractor;
   private retriever: HybridRetriever;
+  private openai: OpenAI;
+  private config: ResolvedModelConfig;
 
-  constructor(config: RelayConfig) {
+  constructor(config: RelayConfigWithClient) {
     const validConfig = RelayConfigSchema.parse(config);
+    const modelConfig: ResolvedModelConfig = {
+      ...DEFAULT_MODEL_CONFIG,
+      ...validConfig.models,
+    };
 
     this.pg = new PostgresDriver(validConfig.pg);
     this.neo4j = new Neo4jDriver(validConfig.neo4j);
+    this.config = modelConfig;
 
-    const apiKey = validConfig.openaiApiKey || process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OpenAI API Key is required");
+    if (config.openaiClient) {
+      this.openai = config.openaiClient;
+    } else {
+      const apiKey = validConfig.openaiApiKey || process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OpenAI API Key is required");
+      this.openai = new OpenAI({ apiKey });
+    }
 
-    this.extractor = new Extractor(apiKey, this.pg, this.neo4j);
-    this.retriever = new HybridRetriever(apiKey, this.pg, this.neo4j);
+    const moduleOptions = {
+      openaiClient: this.openai,
+      models: modelConfig,
+    };
+
+    this.extractor = new Extractor(this.pg, this.neo4j, moduleOptions);
+    this.retriever = new HybridRetriever(this.pg, this.neo4j, moduleOptions);
   }
 
   async init() {
@@ -41,9 +64,12 @@ export class RelayGraph {
 
   async ask(query: string) {
     const context = await this.retriever.retrieve(query);
-
     const synthesis = await this.synthesizeAnswer(query, context);
     return synthesis;
+  }
+
+  getConfig(): ResolvedModelConfig {
+    return { ...this.config };
   }
 
   private async synthesizeAnswer(
@@ -58,9 +84,9 @@ export class RelayGraph {
       .map((t) => `${t.source.name} -[${t.relationship}]-> ${t.target.name}`)
       .join("\n");
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const completion = await this.openai.chat.completions.create({
+      model: this.config.chatModel,
+      temperature: this.config.temperature,
       messages: [
         {
           role: "system",

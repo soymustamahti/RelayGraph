@@ -21,6 +21,11 @@ const relay = new RelayGraph({
     user: process.env.NEO4J_USER!,
     password: process.env.NEO4J_PASSWORD!,
   },
+  models: {
+    chatModel: process.env.CHAT_MODEL || "gpt-4o",
+    embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
+    temperature: Number(process.env.TEMPERATURE) || 0,
+  },
 });
 
 relay.init().then(() => console.log("✅ RelayGraph Initialized"));
