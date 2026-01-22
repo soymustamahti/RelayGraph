@@ -65,6 +65,19 @@ export class PostgresDriver
         );
       `);
 
+      const hasTsvColumn = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'relay_chunks' AND column_name = 'content_tsv';
+      `);
+
+      if (hasTsvColumn.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE relay_chunks 
+          ADD COLUMN content_tsv TSVECTOR 
+          GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+        `);
+      }
+
       await client.query(`
         CREATE INDEX IF NOT EXISTS relay_chunks_embedding_idx 
         ON relay_chunks 
@@ -74,6 +87,12 @@ export class PostgresDriver
       await client.query(`
         CREATE INDEX IF NOT EXISTS relay_chunks_document_idx 
         ON relay_chunks(document_id);
+      `);
+
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS relay_chunks_fts_idx 
+        ON relay_chunks 
+        USING gin(content_tsv);
       `);
     } finally {
       client.release();
@@ -268,6 +287,145 @@ export class PostgresDriver
       documentCount: Number.parseInt(docs.rows[0].count),
       chunkCount: Number.parseInt(chunks.rows[0].count),
     };
+  }
+
+  async searchBM25(
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ id: string; content: string; score: number }>> {
+    const words = query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+
+    if (words.length === 0) {
+      return [];
+    }
+
+    const tsQuery = words.join(" & ");
+
+    const result = await this.pool.query(
+      `SELECT id, content, 
+              ts_rank_cd(content_tsv, plainto_tsquery('english', $1), 32) as score
+       FROM relay_chunks
+       WHERE content_tsv @@ plainto_tsquery('english', $1)
+       ORDER BY score DESC
+       LIMIT $2`,
+      [tsQuery, limit],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      content: row.content,
+      score: Number.parseFloat(row.score),
+    }));
+  }
+
+  async hybridSearch(
+    query: string,
+    embedding: number[],
+    options: {
+      limit?: number;
+      semanticWeight?: number;
+      bm25Weight?: number;
+      semanticThreshold?: number;
+    } = {},
+  ): Promise<
+    Array<{
+      id: string;
+      content: string;
+      semanticScore: number;
+      bm25Score: number;
+      combinedScore: number;
+    }>
+  > {
+    const limit = options.limit ?? 10;
+    const semanticWeight = options.semanticWeight ?? 0.7;
+    const bm25Weight = options.bm25Weight ?? 0.3;
+    const semanticThreshold = options.semanticThreshold ?? 0.3;
+
+    const result = await this.pool.query(
+      `WITH semantic AS (
+         SELECT id, content, 
+                1 - (embedding <=> $1::vector) as semantic_score
+         FROM relay_chunks
+         WHERE 1 - (embedding <=> $1::vector) >= $4
+       ),
+       bm25 AS (
+         SELECT id, content,
+                ts_rank_cd(content_tsv, plainto_tsquery('english', $2), 32) as bm25_score
+         FROM relay_chunks
+         WHERE content_tsv @@ plainto_tsquery('english', $2)
+       ),
+       combined AS (
+         SELECT 
+           COALESCE(s.id, b.id) as id,
+           COALESCE(s.content, b.content) as content,
+           COALESCE(s.semantic_score, 0) as semantic_score,
+           COALESCE(b.bm25_score, 0) as bm25_score,
+           (COALESCE(s.semantic_score, 0) * $5 + COALESCE(b.bm25_score, 0) * $6) as combined_score
+         FROM semantic s
+         FULL OUTER JOIN bm25 b ON s.id = b.id
+       )
+       SELECT * FROM combined
+       ORDER BY combined_score DESC
+       LIMIT $3`,
+      [
+        `[${embedding.join(",")}]`,
+        query,
+        limit,
+        semanticThreshold,
+        semanticWeight,
+        bm25Weight,
+      ],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      content: row.content,
+      semanticScore: Number.parseFloat(row.semantic_score || "0"),
+      bm25Score: Number.parseFloat(row.bm25_score || "0"),
+      combinedScore: Number.parseFloat(row.combined_score || "0"),
+    }));
+  }
+
+  async getChunkById(id: string): Promise<IChunkRecord | null> {
+    const result = await this.pool.query(
+      "SELECT * FROM relay_chunks WHERE id = $1",
+      [id],
+    );
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      content: row.content,
+      embedding: row.embedding,
+      chunkIndex: row.chunk_index,
+      metadata: row.metadata,
+      createdAt: row.created_at,
+    };
+  }
+
+  async getChunksByIds(ids: string[]): Promise<IChunkRecord[]> {
+    if (ids.length === 0) return [];
+
+    const result = await this.pool.query(
+      "SELECT * FROM relay_chunks WHERE id = ANY($1)",
+      [ids],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      documentId: row.document_id,
+      content: row.content,
+      embedding: row.embedding,
+      chunkIndex: row.chunk_index,
+      metadata: row.metadata,
+      createdAt: row.created_at,
+    }));
   }
 }
 

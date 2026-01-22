@@ -22,6 +22,27 @@ export abstract class BaseNeo4jRepository {
     return label.replace(/[^a-zA-Z0-9_]/g, "_");
   }
 
+  protected toNumber(value: unknown): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "toNumber" in value &&
+      typeof (value as { toNumber: () => number }).toNumber === "function"
+    ) {
+      return (value as { toNumber: () => number }).toNumber();
+    }
+    return Number(value);
+  }
+
   protected mapEntityNode(node: {
     properties: Record<string, unknown>;
   }): IEntityNode {

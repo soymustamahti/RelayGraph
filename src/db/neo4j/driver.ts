@@ -123,4 +123,32 @@ export class Neo4jDriver {
   ): Promise<void> {
     return this.relationships.batchUpsert(relationships);
   }
+
+  async bfsSearch(
+    startEntityIds: string[],
+    maxDepth = 2,
+    limit = 50,
+  ): Promise<
+    Array<{
+      entity: IEntityNode;
+      depth: number;
+      path: string[];
+    }>
+  > {
+    return this.entities.bfsSearch(startEntityIds, maxDepth, limit);
+  }
+
+  async fulltextSearchEntities(
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ entity: IEntityNode; score: number }>> {
+    return this.entities.fulltextSearch(query, limit);
+  }
+
+  async searchEntitiesWithScore(
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ entity: IEntityNode; score: number }>> {
+    return this.entities.searchWithScore(query, limit);
+  }
 }

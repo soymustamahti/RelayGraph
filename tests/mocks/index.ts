@@ -83,6 +83,51 @@ export function createMockPostgresDriver() {
         chunkCount: 25,
       }),
     ),
+    searchBM25: mock(() =>
+      Promise.resolve([
+        { id: "chunk-1", content: "Sample content about Mustapha", score: 0.8 },
+        {
+          id: "chunk-2",
+          content: "RelayGraph is a knowledge graph",
+          score: 0.6,
+        },
+      ]),
+    ),
+    hybridSearch: mock(() =>
+      Promise.resolve([
+        {
+          id: "chunk-1",
+          content: "Sample content about Mustapha",
+          semanticScore: 0.95,
+          bm25Score: 0.8,
+          combinedScore: 0.9,
+        },
+      ]),
+    ),
+    getChunkById: mock(() =>
+      Promise.resolve({
+        id: "chunk-1",
+        documentId: "doc-123",
+        content: "Sample content",
+        embedding: [],
+        chunkIndex: 0,
+        metadata: {},
+        createdAt: new Date(),
+      }),
+    ),
+    getChunksByIds: mock(() =>
+      Promise.resolve([
+        {
+          id: "chunk-1",
+          documentId: "doc-123",
+          content: "Sample content",
+          embedding: [],
+          chunkIndex: 0,
+          metadata: {},
+          createdAt: new Date(),
+        },
+      ]),
+    ),
   };
 }
 
@@ -162,6 +207,65 @@ export function createMockNeo4jDriver() {
       }),
     ),
     runQuery: mock(() => Promise.resolve([])),
+    bfsSearch: mock(() =>
+      Promise.resolve([
+        {
+          entity: {
+            id: "relaygraph",
+            name: "RelayGraph",
+            type: "Project",
+            description: "A knowledge graph",
+          },
+          depth: 1,
+          path: ["BUILDS"],
+        },
+        {
+          entity: {
+            id: "typescript",
+            name: "TypeScript",
+            type: "Technology",
+            description: "A programming language",
+          },
+          depth: 2,
+          path: ["BUILDS", "USES"],
+        },
+      ]),
+    ),
+    fulltextSearchEntities: mock(() =>
+      Promise.resolve([
+        {
+          entity: {
+            id: "mustapha",
+            name: "Mustapha",
+            type: "Person",
+            description: "A developer",
+          },
+          score: 0.9,
+        },
+      ]),
+    ),
+    searchEntitiesWithScore: mock(() =>
+      Promise.resolve([
+        {
+          entity: {
+            id: "mustapha",
+            name: "Mustapha",
+            type: "Person",
+            description: "A developer",
+          },
+          score: 3,
+        },
+        {
+          entity: {
+            id: "relaygraph",
+            name: "RelayGraph",
+            type: "Project",
+            description: "A knowledge graph",
+          },
+          score: 2,
+        },
+      ]),
+    ),
   };
 }
 

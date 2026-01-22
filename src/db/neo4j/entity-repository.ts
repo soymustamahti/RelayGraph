@@ -228,4 +228,130 @@ export class EntityRepository
       await session.close();
     }
   }
+
+  async bfsSearch(
+    startEntityIds: string[],
+    maxDepth = 2,
+    limit = 50,
+  ): Promise<
+    Array<{
+      entity: IEntityNode;
+      depth: number;
+      path: string[];
+    }>
+  > {
+    const session = this.getSession();
+    try {
+      const result = await session.run(
+        `UNWIND $startIds AS startId
+         MATCH path = (start:Entity {id: startId})-[*1..${maxDepth}]-(n:Entity)
+         WHERE n.id <> startId
+         WITH n, min(length(path)) as depth, 
+              [rel in relationships(path) | type(rel)] as relTypes
+         RETURN DISTINCT n, depth, relTypes
+         ORDER BY depth ASC
+         LIMIT $limit`,
+        { startIds: startEntityIds, limit: neo4j.int(limit) },
+      );
+
+      return result.records.map((record) => ({
+        entity: this.mapEntityNode(record.get("n")),
+        depth: record.get("depth").toNumber
+          ? record.get("depth").toNumber()
+          : record.get("depth"),
+        path: record.get("relTypes"),
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async fulltextSearch(
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ entity: IEntityNode; score: number }>> {
+    const session = this.getSession();
+    try {
+      await session.run(`
+        CREATE FULLTEXT INDEX entity_fulltext IF NOT EXISTS
+        FOR (n:Entity)
+        ON EACH [n.name, n.description]
+      `);
+
+      const sanitizedQuery = query
+        .replace(/[^a-zA-Z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 2)
+        .map((w) => `${w}~`)
+        .join(" OR ");
+
+      if (!sanitizedQuery) {
+        return [];
+      }
+
+      const result = await session.run(
+        `CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
+         YIELD node, score
+         RETURN node, score
+         ORDER BY score DESC
+         LIMIT $limit`,
+        { query: sanitizedQuery, limit: neo4j.int(limit) },
+      );
+
+      return result.records.map((record) => ({
+        entity: this.mapEntityNode(record.get("node")),
+        score: this.toNumber(record.get("score")),
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async searchWithScore(
+    query: string,
+    limit = 10,
+  ): Promise<Array<{ entity: IEntityNode; score: number }>> {
+    const session = this.getSession();
+    try {
+      const words = query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 3);
+
+      if (words.length === 0) {
+        return [];
+      }
+
+      const conditions = words
+        .map(
+          (_, i) =>
+            `(CASE WHEN toLower(n.name) CONTAINS $word${i} THEN 2 ELSE 0 END + 
+              CASE WHEN toLower(n.description) CONTAINS $word${i} THEN 1 ELSE 0 END)`,
+        )
+        .join(" + ");
+
+      const params: Record<string, unknown> = { limit: neo4j.int(limit) };
+      words.forEach((w, i) => {
+        params[`word${i}`] = w;
+      });
+
+      const result = await session.run(
+        `MATCH (n:Entity)
+         WITH n, ${conditions} AS score
+         WHERE score > 0
+         RETURN n, score
+         ORDER BY score DESC
+         LIMIT $limit`,
+        params,
+      );
+
+      return result.records.map((record) => ({
+        entity: this.mapEntityNode(record.get("n")),
+        score: this.toNumber(record.get("score")),
+      }));
+    } finally {
+      await session.close();
+    }
+  }
 }
